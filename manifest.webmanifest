@@ -1,0 +1,28 @@
+{
+  "name": "감사 일기장",
+  "short_name": "감사 일기장",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7b4d1",
+  "theme_color": "#eb34e5",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
