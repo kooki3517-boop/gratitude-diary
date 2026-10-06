@@ -542,17 +542,10 @@ function refillFortunes(){
   fortuneBag=fortunes.map((_,i)=>i).filter(i=>!blocked.has(i));
   for(let i=fortuneBag.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[fortuneBag[i],fortuneBag[j]]=[fortuneBag[j],fortuneBag[i]];}
 }
-const fortunePhotos=['58404.jpg','57339.jpg','57053.jpg','56588.jpg','55151.jpg','54722.jpg','53683.jpg','52611.jpg','44231.jpg','44248.jpg'].map(x=>'fortune-photos/'+x);
 let lastFortunePhoto=-1;
 function openFortune(){
   const photo=$('#fortunePhoto'), text=$('#fortuneText');
-  if(Math.random()<0.05){
-    let i=Math.floor(Math.random()*fortunePhotos.length);
-    if(fortunePhotos.length>1 && i===lastFortunePhoto) i=(i+1+Math.floor(Math.random()*(fortunePhotos.length-1)))%fortunePhotos.length;
-    lastFortunePhoto=i;
-    photo.src=fortunePhotos[i]; photo.classList.remove('hidden');
-    text.textContent=''; text.classList.add('hidden');
-  }else{
+{
     if(!fortuneBag.length) refillFortunes();
     const idx=fortuneBag.pop(), f=fortunes[idx];
     recentFortunes.push(idx); if(recentFortunes.length>40) recentFortunes.shift();
@@ -604,14 +597,15 @@ startBgm(); updateMusicButton();
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
 
-/* v29 actual WAV sound effects; all other behavior unchanged */
+/* v34: only the heart LIKE sound remains. No general button/click sound. */
 (()=>{
- const clickAudio=new Audio('./click.wav?v=29'), magicAudio=new Audio('./magic.wav?v=29');
- clickAudio.preload='auto'; magicAudio.preload='auto'; clickAudio.volume=.72; magicAudio.volume=.88;
- const play=a=>{try{a.pause();a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}};
+ const magicAudio=new Audio('./magic.wav?v=34');
+ magicAudio.preload='auto';
+ magicAudio.volume=.88;
+ const play=()=>{try{magicAudio.pause();magicAudio.currentTime=0;const p=magicAudio.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}};
  document.addEventListener('pointerdown',e=>{
-   const b=e.target.closest('button'); if(!b)return;
-   if(b.dataset.action==='heart'){play(!likes[b.dataset.id]?magicAudio:clickAudio);return;}
-   play(clickAudio);
+   const b=e.target.closest('button[data-action="heart"]');
+   if(!b)return;
+   if(!likes[b.dataset.id]) play(); // ♡ -> ♥ only
  },true);
 })();
