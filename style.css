@@ -49,7 +49,4 @@
 #savedPop .actions{display:flex!important;justify-content:center!important;align-items:center!important}
 #savedPop .actions .cancel{width:auto!important;min-width:0!important;padding:5px 14px!important;font-size:11px!important;font-weight:600!important}
 
-/* v26: expandable gratitude rows + subtle shared heart */
-#write .dbody{max-height:78vh;overflow-y:auto}
-.heartBtn{font-size:15px!important;line-height:1;color:#a45a7d!important;transition:transform .12s ease}
-.heartBtn.on{color:#e12645!important;transform:scale(1.08)}
+.heartBtn{font-size:15px!important;color:#9b5574!important;line-height:1}.heartBtn.liked{color:#e32636!important}.dialog #writeRows{max-height:48vh;overflow-y:auto;padding-right:2px}
