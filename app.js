@@ -603,3 +603,54 @@ window.addEventListener('pagehide',pauseBgmForBackground);
 startBgm(); updateMusicButton();
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
+
+/* v28 UI sound effects only — no layout/data behavior changes */
+(()=>{
+  let ac=null;
+  function ctx(){
+    if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)();
+    if(ac.state==='suspended') ac.resume().catch(()=>{});
+    return ac;
+  }
+  function gain(c,when,level,dur){
+    const g=c.createGain();
+    g.gain.setValueAtTime(0.0001,when);
+    g.gain.exponentialRampToValueAtTime(level,when+0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+    g.connect(c.destination); return g;
+  }
+  function clickSfx(){
+    try{
+      const c=ctx(), t=c.currentTime;
+      const o=c.createOscillator(), g=gain(c,t,0.055,0.055);
+      o.type='square'; o.frequency.setValueAtTime(520,t); o.frequency.exponentialRampToValueAtTime(210,t+0.045);
+      o.connect(g); o.start(t); o.stop(t+0.06);
+      const o2=c.createOscillator(), g2=gain(c,t+0.018,0.025,0.045);
+      o2.type='triangle'; o2.frequency.setValueAtTime(170,t+0.018); o2.connect(g2); o2.start(t+0.018); o2.stop(t+0.07);
+    }catch(_){ }
+  }
+  function magicSfx(){
+    try{
+      const c=ctx(), t=c.currentTime;
+      [0,0.075,0.15,0.235].forEach((d,i)=>{
+        const o=c.createOscillator(), g=gain(c,t+d,0.045,0.24);
+        o.type='sine';
+        const notes=[659.25,783.99,987.77,1318.51];
+        o.frequency.setValueAtTime(notes[i],t+d);
+        o.connect(g); o.start(t+d); o.stop(t+d+0.26);
+      });
+      const sparkle=c.createOscillator(), sg=gain(c,t+0.12,0.018,0.42);
+      sparkle.type='triangle'; sparkle.frequency.setValueAtTime(1500,t+0.12); sparkle.frequency.exponentialRampToValueAtTime(2600,t+0.48);
+      sparkle.connect(sg); sparkle.start(t+0.12); sparkle.stop(t+0.55);
+    }catch(_){ }
+  }
+  document.addEventListener('pointerdown',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.action==='heart'){
+      const id=b.dataset.id;
+      if(!likes[id]) magicSfx(); else clickSfx();
+      return;
+    }
+    clickSfx();
+  },true);
+})();
