@@ -568,9 +568,8 @@ $('#fortuneOpen').onclick=openFortune;
 const bgmAudio=$('#bgmAudio'), volume=$('#volume');
 let bgmOn=true;
 bgmAudio.volume=.35;
-let deferBgmForFirstHeart=false;
 async function startBgm(){
-  if(deferBgmForFirstHeart || !bgmOn || document.hidden || !document.hasFocus()) return;
+  if(!bgmOn || document.hidden || !document.hasFocus()) return;
   try{await bgmAudio.play();}catch(e){}
 }
 function pauseBgmForBackground(){ bgmAudio.pause(); }
@@ -586,13 +585,18 @@ $('#music').onclick=async e=>{
 };
 volume.oninput=()=>{bgmAudio.volume=Number(volume.value)/100; if(bgmOn&&bgmAudio.paused)startBgm();};
 // Audible autoplay is blocked on many phones. The first touch anywhere unlocks it automatically.
-// Preserve the original BGM unlock behavior. Only a first empty-heart press defers BGM until magic.wav ends.
-let initialGestureSeen=false;
+// Special case only for the very first empty-heart press: BGM still starts immediately
+// (so mobile autoplay unlock is preserved), but silently until magic.wav finishes.
+let firstInteractionSeen=false;
+let firstHeartMutedBgm=false;
 document.addEventListener('pointerdown',e=>{
-  if(initialGestureSeen) return;
-  initialGestureSeen=true;
+  if(firstInteractionSeen) return;
+  firstInteractionSeen=true;
   const heart=e.target.closest&&e.target.closest('button[data-action="heart"]');
-  if(heart && !likes[heart.dataset.id]) deferBgmForFirstHeart=true;
+  if(heart && !likes[heart.dataset.id]){
+    firstHeartMutedBgm=true;
+    bgmAudio.volume=0;
+  }
 },{capture:true,passive:true});
 const firstGesture=()=>{if(bgmOn&&bgmAudio.paused)startBgm();};
 document.addEventListener('pointerdown',firstGesture,{capture:true,passive:true});
@@ -622,18 +626,15 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
    const b=e.target.closest('button'); if(!b)return;
    if(b.dataset.action==='heart'){
      const liking=!likes[b.dataset.id];
-     if(liking && deferBgmForFirstHeart){
+     if(liking && firstHeartMutedBgm){
+       firstHeartMutedBgm=false;
        try{
          magicAudio.pause(); magicAudio.currentTime=0;
          const p=magicAudio.play(); if(p&&p.catch)p.catch(()=>{});
-         magicAudio.addEventListener('ended',()=>{
-           deferBgmForFirstHeart=false;
-           if(bgmOn&&bgmAudio.paused)startBgm();
-         },{once:true});
-       }catch(_){
-         deferBgmForFirstHeart=false;
-         if(bgmOn&&bgmAudio.paused)startBgm();
-       }
+         const restore=()=>{ bgmAudio.volume=Number(volume.value)/100; };
+         magicAudio.addEventListener('ended',restore,{once:true});
+         magicAudio.addEventListener('error',restore,{once:true});
+       }catch(_){ bgmAudio.volume=Number(volume.value)/100; }
      }else play(liking?magicAudio:clickAudio);
      return;
    }
