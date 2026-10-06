@@ -1,3 +1,14 @@
+
+let __heartFirstGestureDelayUntil = 0;
+document.addEventListener('pointerdown', (e)=>{
+  if (!window.__bgmUserGestureSeen) {
+    window.__bgmUserGestureSeen = true;
+    if (e.target.closest && e.target.closest('button[data-action="heart"]')) {
+      __heartFirstGestureDelayUntil = Date.now() + 900;
+    }
+  }
+}, true);
+
 const sample={전혜나:[],오지용:[]};
 const SUPABASE_URL='https://piysxzdcokmjvkcepriu.supabase.co';
 const SUPABASE_KEY='sb_publishable_8sQdOKQT0oEysJzE5ZnQvQ_QU4mjXZ0';
@@ -558,6 +569,13 @@ function openFortune(){
     recentFortunes.push(idx); if(recentFortunes.length>40) recentFortunes.shift();
     photo.classList.add('hidden'); photo.removeAttribute('src');
     text.classList.remove('hidden'); text.textContent=f;
+  if (__heartFirstGestureDelayUntil > Date.now()) {
+    const d = __heartFirstGestureDelayUntil - Date.now();
+    __heartFirstGestureDelayUntil = 0;
+    setTimeout(()=>startBgm(), d);
+    return;
+  }
+
   }
   $('#fortuneSource').textContent='';
   show('#fortunePop');
@@ -585,7 +603,20 @@ $('#music').onclick=async e=>{
 };
 volume.oninput=()=>{bgmAudio.volume=Number(volume.value)/100; if(bgmOn&&bgmAudio.paused)startBgm();};
 // Audible autoplay is blocked on many phones. The first touch anywhere unlocks it automatically.
-const firstGesture=()=>{if(bgmOn&&bgmAudio.paused)startBgm();};
+// Only exception: if the very first gesture is a heart LIKE, its magic sound plays first,
+// then BGM starts after that sound. Every other first gesture keeps the original behavior.
+let firstGestureHandled=false;
+const firstGesture=(e)=>{
+  if(firstGestureHandled) return;
+  firstGestureHandled=true;
+  const heart=e.target&&e.target.closest?e.target.closest('button[data-action="heart"]'):null;
+  const isHeartLike=heart && !likes[heart.dataset.id];
+  if(isHeartLike){
+    window.__delayBgmForFirstHeart=true;
+    return;
+  }
+  if(bgmOn&&bgmAudio.paused)startBgm();
+};
 document.addEventListener('pointerdown',firstGesture,{capture:true,passive:true});
 document.addEventListener('touchend',firstGesture,{capture:true,passive:true});
 document.addEventListener('click',firstGesture,true);
@@ -611,7 +642,18 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
  const play=a=>{try{a.pause();a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}};
  document.addEventListener('pointerdown',e=>{
    const b=e.target.closest('button'); if(!b)return;
-   if(b.dataset.action==='heart'){play(!likes[b.dataset.id]?magicAudio:clickAudio);return;}
+   if(b.dataset.action==='heart'){
+     const liking=!likes[b.dataset.id];
+     if(liking && window.__delayBgmForFirstHeart){
+       window.__delayBgmForFirstHeart=false;
+       try{
+         magicAudio.pause(); magicAudio.currentTime=0;
+         const p=magicAudio.play(); if(p&&p.catch)p.catch(()=>{});
+         magicAudio.addEventListener('ended',()=>{if(bgmOn&&bgmAudio.paused)startBgm();},{once:true});
+       }catch(_){ if(bgmOn&&bgmAudio.paused)startBgm(); }
+     }else play(liking?magicAudio:clickAudio);
+     return;
+   }
    play(clickAudio);
  },true);
 })();
