@@ -584,45 +584,8 @@ $('#music').onclick=async e=>{
   if(bgmOn) await startBgm(); else bgmAudio.pause();
 };
 volume.oninput=()=>{bgmAudio.volume=Number(volume.value)/100; if(bgmOn&&bgmAudio.paused)startBgm();};
-// First-gesture audio unlock.
-// If the first gesture is an empty-heart LIKE, Web Audio schedules magic first and BGM after it.
-// Otherwise the original BGM-first behavior is preserved.
-let audioFirstGestureDone=false;
-let webAudioCtx=null, webMagicBuffer=null, webMagicLoading=null;
-async function loadWebMagic(){
-  if(webMagicBuffer) return webMagicBuffer;
-  if(!webMagicLoading) webMagicLoading=fetch('./magic.wav?v=33').then(r=>r.arrayBuffer()).then(b=>webAudioCtx.decodeAudioData(b)).then(b=>webMagicBuffer=b);
-  return webMagicLoading;
-}
-const firstGesture=async e=>{
-  if(audioFirstGestureDone) return;
-  audioFirstGestureDone=true;
-  const heart=e && e.target && e.target.closest ? e.target.closest('button[data-action="heart"]') : null;
-  const firstHeartLike=heart && !likes[heart.dataset.id];
-  if(!firstHeartLike){
-    if(bgmOn&&bgmAudio.paused)startBgm();
-    return;
-  }
-  try{
-    const AC=window.AudioContext||window.webkitAudioContext;
-    webAudioCtx=webAudioCtx||new AC();
-    await webAudioCtx.resume();
-    const buf=await loadWebMagic();
-    const src=webAudioCtx.createBufferSource();
-    const gain=webAudioCtx.createGain(); gain.gain.value=.88;
-    src.buffer=buf; src.connect(gain).connect(webAudioCtx.destination);
-    src.start(webAudioCtx.currentTime);
-    // Keep the normal HTML BGM element, but schedule its start from this same first gesture.
-    // A silent oscillator keeps the WebAudio context active while the short file is decoded/played.
-    const osc=webAudioCtx.createOscillator(), og=webAudioCtx.createGain(); og.gain.value=0;
-    osc.connect(og).connect(webAudioCtx.destination); osc.start(); osc.stop(webAudioCtx.currentTime+buf.duration+.2);
-    setTimeout(()=>{ if(bgmOn&&bgmAudio.paused) startBgm(); }, Math.max(0,(buf.duration-.03)*1000));
-    window.__skipHeartSfxOnce=true;
-  }catch(_){
-    // Fallback: never strand BGM if WebAudio is unavailable.
-    if(bgmOn&&bgmAudio.paused)startBgm();
-  }
-};
+// Audible autoplay is blocked on many phones. The first touch anywhere unlocks it automatically.
+const firstGesture=()=>{if(bgmOn&&bgmAudio.paused)startBgm();};
 document.addEventListener('pointerdown',firstGesture,{capture:true,passive:true});
 document.addEventListener('touchend',firstGesture,{capture:true,passive:true});
 document.addEventListener('click',firstGesture,true);
@@ -641,17 +604,14 @@ startBgm(); updateMusicButton();
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
 
-/* v33 UI SFX: existing real WAV files; first-heart magic is handled by the unlock scheduler above. */
+/* v29 actual WAV sound effects; all other behavior unchanged */
 (()=>{
- const clickAudio=new Audio('./click.wav?v=33'), magicAudio=new Audio('./magic.wav?v=33');
+ const clickAudio=new Audio('./click.wav?v=29'), magicAudio=new Audio('./magic.wav?v=29');
  clickAudio.preload='auto'; magicAudio.preload='auto'; clickAudio.volume=.72; magicAudio.volume=.88;
  const play=a=>{try{a.pause();a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}};
  document.addEventListener('pointerdown',e=>{
    const b=e.target.closest('button'); if(!b)return;
-   if(b.dataset.action==='heart'){
-     if(window.__skipHeartSfxOnce){window.__skipHeartSfxOnce=false;return;}
-     play(!likes[b.dataset.id]?magicAudio:clickAudio); return;
-   }
+   if(b.dataset.action==='heart'){play(!likes[b.dataset.id]?magicAudio:clickAudio);return;}
    play(clickAudio);
  },true);
 })();
