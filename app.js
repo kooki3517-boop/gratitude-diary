@@ -557,43 +557,86 @@ function openFortune(){
 }
 $('#fortuneOpen').onclick=openFortune;
 
-// Ballerina music-box BGM. The approved melody is an audio file so it plays exactly as previewed.
-const bgmAudio=$('#bgmAudio'), volume=$('#volume');
-let bgmOn=true;
-bgmAudio.volume=.35;
+// Web Audio BGM: no HTMLMediaElement, to reduce system media playback notifications.
+const volume=$('#volume');
+let bgmOn=true, audioCtx=null, bgmBuffer=null, bgmSource=null, bgmGain=null;
+let bgmOffset=0, bgmStartedAt=0, bgmPending=false, bgmLoad=null, bgmStartToken=0;
+function audioContext(){
+  if(!audioCtx){
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return null;
+    audioCtx=new AC();
+    bgmGain=audioCtx.createGain();
+    bgmGain.gain.value=Number(volume.value)/100;
+    bgmGain.connect(audioCtx.destination);
+  }
+  return audioCtx;
+}
+function loadBgm(){
+  const ctx=audioContext();
+  if(!ctx)return Promise.reject(new Error('Web Audio unavailable'));
+  if(!bgmLoad)bgmLoad=fetch('./bgm.wav').then(r=>{
+    if(!r.ok)throw new Error('BGM fetch failed');
+    return r.arrayBuffer();
+  }).then(data=>ctx.decodeAudioData(data)).then(buffer=>bgmBuffer=buffer)
+    .catch(err=>{bgmLoad=null;throw err;});
+  return bgmLoad;
+}
+function stopBgm(){
+  bgmStartToken++;
+  if(bgmSource){
+    if(bgmBuffer)bgmOffset=(bgmOffset+Math.max(0,audioCtx.currentTime-bgmStartedAt))%bgmBuffer.duration;
+    try{bgmSource.stop();}catch(_){}
+    try{bgmSource.disconnect();}catch(_){}
+    bgmSource=null;
+  }
+}
 async function startBgm(){
-  if(!bgmOn || document.hidden || !document.hasFocus()) return;
-  try{await bgmAudio.play();}catch(e){}
+  if(!bgmOn||document.hidden||!document.hasFocus()||bgmSource)return;
+  const ctx=audioContext();
+  if(!ctx)return;
+  const token=++bgmStartToken;
+  try{
+    // Resume immediately in the user's gesture before waiting for the WAV download.
+    const resumed=ctx.resume();
+    await resumed;
+    await loadBgm();
+    if(token!==bgmStartToken||!bgmOn||document.hidden||!document.hasFocus()||bgmSource)return;
+    const src=ctx.createBufferSource();
+    src.buffer=bgmBuffer;src.loop=true;src.connect(bgmGain);
+    bgmStartedAt=ctx.currentTime;
+    src.start(0,bgmOffset%bgmBuffer.duration);
+    bgmSource=src;
+  }catch(_){}
 }
-function pauseBgmForBackground(){ bgmAudio.pause(); }
-function resumeBgmIfVisible(){ if(bgmOn && !document.hidden && document.hasFocus()) startBgm(); }
-
+function pauseBgmForBackground(){stopBgm();}
+function resumeBgmIfVisible(){if(bgmOn&&!document.hidden&&document.hasFocus())startBgm();}
 function updateMusicButton(){
-  const b=$('#music'); b.classList.toggle('off',!bgmOn); b.textContent=bgmOn?'♪':'×♪';
-  b.title=bgmOn?'BGM 끄기':'BGM 켜기'; b.setAttribute('aria-label',b.title);
+  const b=$('#music');b.classList.toggle('off',!bgmOn);b.textContent=bgmOn?'♪':'×♪';
+  b.title=bgmOn?'BGM 끄기':'BGM 켜기';b.setAttribute('aria-label',b.title);
 }
-$('#music').onclick=async e=>{
-  e.preventDefault();e.stopPropagation(); bgmOn=!bgmOn; updateMusicButton();
-  if(bgmOn) await startBgm(); else bgmAudio.pause();
+$('#music').onclick=e=>{
+  e.preventDefault();e.stopPropagation();bgmOn=!bgmOn;updateMusicButton();
+  if(bgmOn)startBgm();else stopBgm();
 };
-volume.oninput=()=>{bgmAudio.volume=Number(volume.value)/100; if(bgmOn&&bgmAudio.paused)startBgm();};
-// Audible autoplay is blocked on many phones. The first touch anywhere unlocks it automatically.
-const firstGesture=()=>{if(bgmOn&&bgmAudio.paused)startBgm();};
+volume.oninput=()=>{
+  if(bgmGain)bgmGain.gain.value=Number(volume.value)/100;
+  if(bgmOn&&!bgmSource)startBgm();
+};
+const firstGesture=()=>{if(bgmOn&&!bgmSource)startBgm();};
 document.addEventListener('pointerdown',firstGesture,{capture:true,passive:true});
 document.addEventListener('touchend',firstGesture,{capture:true,passive:true});
 document.addEventListener('click',firstGesture,true);
 window.addEventListener('pageshow',resumeBgmIfVisible);
 document.addEventListener('DOMContentLoaded',startBgm);
 window.addEventListener('load',startBgm);
-// Stop audio whenever this site is no longer the active/visible page.
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden) pauseBgmForBackground();
-  else resumeBgmIfVisible();
+  if(document.hidden)pauseBgmForBackground();else resumeBgmIfVisible();
 });
 window.addEventListener('blur',pauseBgmForBackground);
 window.addEventListener('focus',resumeBgmIfVisible);
 window.addEventListener('pagehide',pauseBgmForBackground);
-startBgm(); updateMusicButton();
+startBgm();updateMusicButton();
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
 
