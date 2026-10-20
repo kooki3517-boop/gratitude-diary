@@ -50,3 +50,16 @@
 #savedPop .actions .cancel{width:auto!important;min-width:0!important;padding:5px 14px!important;font-size:11px!important;font-weight:600!important}
 
 .heartBtn{font-size:15px!important;color:#9b5574!important;line-height:1}.heartBtn.liked{color:#e32636!important}.dialog #writeRows{max-height:48vh;overflow-y:auto;padding-right:2px}
+
+/* v37 comments; uses the existing pink retro palette */
+.commentArea{border-top:1px dotted #e7a1bd;padding:4px 6px 6px;font-size:10px}
+.commentToggle{border:0;background:transparent;color:#a23c74;font-weight:700;font-size:10px;padding:4px 1px;cursor:pointer}
+.commentPanel{padding:4px 2px}.commentItem{padding:5px 2px;border-top:1px dotted #e9b2c9}
+.commentMeta{display:flex;align-items:center;gap:5px;color:#91416a;font-size:9px}
+.commentMeta time{color:#ab7891;font-size:8px}.commentDelete{margin-left:auto;background:transparent;border:0;color:#9e5c7b;font-size:14px;padding:0 3px}
+.commentText{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45;padding:3px 1px;color:#571437}
+.commentEmpty{font-size:10px;color:#9e6c83;padding:7px 1px}
+.commentComposer{display:flex;flex-wrap:wrap;gap:4px;padding-top:6px;border-top:1px dotted #e9b2c9}
+.commentComposer select{max-width:100%;font-size:10px;color:#571437;background:#fff7fa;border:1px solid #dc83af;padding:4px}
+.commentComposer textarea{width:100%;min-width:0;resize:vertical;font:11px Arial,'Noto Sans KR',sans-serif;border:1px solid #dc83af;background:#fffafc;color:#571437;padding:5px}
+.commentComposer>button{margin-left:auto;border:2px outset #ffbad7;background:#ffd0e3;color:#79234e;font-size:10px;font-weight:700;padding:4px 9px}
