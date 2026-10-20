@@ -2,15 +2,39 @@ const sample={전혜나:[],오지용:[]};
 const SUPABASE_URL='https://piysxzdcokmjvkcepriu.supabase.co';
 const SUPABASE_KEY='sb_publishable_8sQdOKQT0oEysJzE5ZnQvQ_QU4mjXZ0';
 const API=SUPABASE_URL+'/rest/v1/gratitude_entries';
-const LIKES_API=SUPABASE_URL+'/rest/v1/gratitude_likes';
 const API_HEADERS={'apikey':SUPABASE_KEY,'Content-Type':'application/json'};
 let data={전혜나:[],오지용:[]}, likes={}; let current='전혜나', edit=null, delTarget=null;
 function stamp(v){return v?new Date(v).toLocaleString('ko-KR',{hour12:false}).replace(/\. /g,'.').replace('. ',' '):''}
 function rowToEntry(r){const tail=String(r.gratitude_3??'').split('\n').filter(Boolean);return [r.entry_date,[r.gratitude_1,r.gratitude_2,...tail],stamp(r.updated_at),r.id]}
 async function api(path='',opts={}){const r=await fetch(API+path,{...opts,headers:{...API_HEADERS,...(opts.headers||{})}});if(!r.ok)throw new Error((await r.text())||('HTTP '+r.status));return r.status===204?null:await r.json()}
-async function likesApi(path='',opts={}){const r=await fetch(LIKES_API+path,{...opts,headers:{...API_HEADERS,...(opts.headers||{})}});if(!r.ok)throw new Error((await r.text())||('HTTP '+r.status));return r.status===204?null:await r.json()}
-async function loadLikes(){try{const rows=await likesApi('?select=entry_id,liked');likes={};rows.forEach(r=>likes[r.entry_id]=!!r.liked)}catch(e){try{likes=JSON.parse(localStorage.getItem('gratitude-likes')||'{}')}catch(_){likes={}}}}
-async function loadShared(){try{const rows=await api('?select=id,person,entry_date,gratitude_1,gratitude_2,gratitude_3,updated_at&order=entry_date.desc,updated_at.desc');data={전혜나:[],오지용:[]};rows.forEach(r=>{if(data[r.person])data[r.person].push(rowToEntry(r))});await loadLikes();render()}catch(e){console.error('Supabase load failed',e);render()}}
+async function loadLikes(){
+  const rows=await api('?select=id,liked');
+  likes={};
+  rows.forEach(r=>{likes[r.id]=!!r.liked});
+}
+async function loadShared(){
+  try{
+    const rows=await api('?select=id,person,entry_date,gratitude_1,gratitude_2,gratitude_3,updated_at,liked&order=entry_date.desc,updated_at.desc');
+    data={전혜나:[],오지용:[]};likes={};
+    rows.forEach(r=>{if(data[r.person])data[r.person].push(rowToEntry(r));likes[r.id]=!!r.liked});
+    render();
+  }catch(e){console.error('Supabase load failed',e);render()}
+}
+let syncingLikes=false;
+async function refreshLikes(){
+  if(syncingLikes||document.hidden)return;
+  syncingLikes=true;
+  try{
+    const rows=await api('?select=id,liked');
+    const next={};
+    rows.forEach(r=>next[r.id]=!!r.liked);
+    if(JSON.stringify(next)!==JSON.stringify(likes)){likes=next;render()}
+  }catch(e){console.error('Heart sync failed',e)}
+  finally{syncingLikes=false}
+}
+setInterval(refreshLikes,10000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLikes()});
+window.addEventListener('focus',refreshLikes);
 
 const $=s=>document.querySelector(s), shade=$('.shade');
 const expanded={전혜나:false,오지용:false};
@@ -30,7 +54,24 @@ document.querySelectorAll('.plus').forEach(b=>b.onclick=()=>{current=b.dataset.w
 function openEdit(n,i){current=n;edit=i;let e=data[n][i];if(!e)return;const who=$('#who');if(who)who.textContent=n;$('#date').value=e[0];setWriteRows(e[1]);show('#write');}
 $('#save').onclick=async()=>{const btn=$('#save'),vals=[...document.querySelectorAll('#writeRows .gratitudeInput')].map(x=>x.value.trim()).filter(Boolean),date=$('#date').value;if(!date||vals.length<3)return;btn.disabled=true;try{const body={person:current,entry_date:date,gratitude_1:vals[0],gratitude_2:vals[1],gratitude_3:vals.slice(2).join('\n'),updated_at:new Date().toISOString()};await api('?on_conflict=person,entry_date',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});await loadShared();close();show('#savedPop')}catch(e){console.error('Supabase save failed',e);alert('저장에 실패했습니다. 잠시 후 다시 시도해주세요.')}finally{btn.disabled=false}};
 function askDelete(n,i){delTarget=[n,i];show('#confirm');}
-async function toggleHeart(id){const next=!likes[id];likes[id]=next;render();try{await likesApi('?on_conflict=entry_id',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({entry_id:Number(id),liked:next})})}catch(e){localStorage.setItem('gratitude-likes',JSON.stringify(likes))}}
+const heartSaving=new Set();
+async function toggleHeart(id){
+  if(heartSaving.has(id))return;
+  heartSaving.add(id);
+  const previous=!!likes[id],next=!previous;
+  likes[id]=next;render();
+  try{
+    await api('?id=eq.'+encodeURIComponent(id),{
+      method:'PATCH',
+      headers:{'Prefer':'return=representation'},
+      body:JSON.stringify({liked:next})
+    }).then(rows=>{if(!Array.isArray(rows)||rows.length!==1)throw new Error('Heart update not saved')});
+  }catch(e){
+    likes[id]=previous;render();
+    console.error('Heart save failed',e);
+    alert('하트 저장에 실패했어. 인터넷 연결을 확인하고 다시 눌러줘.');
+  }finally{heartSaving.delete(id)}
+}
 $('.columns').addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b)return;if(b.dataset.action==='heart'){toggleHeart(b.dataset.id);return}const n=b.dataset.who,i=Number(b.dataset.index);if(b.dataset.action==='edit')openEdit(n,i);else if(b.dataset.action==='delete')askDelete(n,i);else if(b.dataset.action==='more')togglePast(n);});
 $('#del').onclick=async()=>{if(!delTarget)return;let[n,i]=delTarget,e=data[n][i];if(!e)return;try{await api('?id=eq.'+encodeURIComponent(e[3]),{method:'DELETE',headers:{'Prefer':'return=minimal'}});delTarget=null;await loadShared();close()}catch(err){console.error('Supabase delete failed',err);alert('삭제에 실패했습니다. 잠시 후 다시 시도해주세요.')}};
 
