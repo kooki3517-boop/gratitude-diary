@@ -5,6 +5,7 @@ const API=SUPABASE_URL+'/rest/v1/gratitude_entries';
 const API_HEADERS={'apikey':SUPABASE_KEY,'Content-Type':'application/json'};
 let data={전혜나:[],오지용:[]}, likes={};
 let comments={}, commentsOpen={}, commentDrafts={}, commentAuthors={};
+let editingCommentId=null, editingCommentText='', savingCommentId=null;
 const COMMENTS_API=SUPABASE_URL+'/rest/v1/gratitude_comments';
 let commentsReady=false; let current='전혜나', edit=null, delTarget=null;
 function stamp(v){return v?new Date(v).toLocaleString('ko-KR',{hour12:false}).replace(/\. /g,'.').replace('. ',' '):''}
@@ -62,7 +63,7 @@ async function refreshComments(){
   try{
     const rows=await commentApi('?select=id,entry_id,author,content,created_at&order=created_at.asc');
     const next={};rows.forEach(r=>{(next[r.entry_id]??=[]).push(r)});
-    if(JSON.stringify(next)!==JSON.stringify(comments)){comments=next;render()}
+    if(JSON.stringify(next)!==JSON.stringify(comments)){comments=next;if(editingCommentId===null)render()}
     commentsReady=true;
   }catch(e){console.error('Comments load failed',e)}
   finally{commentRefreshing=false}
@@ -73,7 +74,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCom
 function renderCommentBox(entryId,diaryOwner){
   const list=comments[entryId]||[],open=!!commentsOpen[entryId];
   const author=commentAuthors[entryId]||(diaryOwner==='전혜나'?'오지용':'전혜나');
-  return `<div class="commentArea"><button type="button" class="commentToggle" data-action="comments" data-id="${entryId}">♡ 댓글 ${list.length} ${open?'접기 ▲':'보기 ▼'}</button>${open?`<div class="commentPanel">${list.map(c=>`<div class="commentItem"><div class="commentMeta"><b>${esc(c.author)}</b><time>${esc(commentTime(c.created_at))}</time><button type="button" class="commentDelete" data-action="deleteComment" data-comment-id="${c.id}" data-id="${entryId}" title="댓글 삭제">×</button></div><div class="commentText">${esc(c.content)}</div></div>`).join('')||'<div class="commentEmpty">아직 댓글이 없어요.</div>'}<div class="commentComposer"><select data-comment-author="${entryId}" aria-label="댓글 작성자"><option value="전혜나" ${author==='전혜나'?'selected':''}>전혜나</option><option value="오지용" ${author==='오지용'?'selected':''}>오지용</option></select><textarea data-comment-input="${entryId}" maxlength="500" rows="2" placeholder="댓글을 남겨 보세요..">${esc(commentDrafts[entryId]||'')}</textarea><button type="button" data-action="sendComment" data-id="${entryId}">남기기</button></div></div>`:''}</div>`;
+  return `<div class="commentArea"><button type="button" class="commentToggle" data-action="comments" data-id="${entryId}">댓글 ${list.length} ${open?'접기 ▲':'보기 ▼'}</button>${open?`<div class="commentPanel">${list.map(c=>`<div class="commentItem"><div class="commentMeta"><b>${esc(c.author)}</b><time>${esc(commentTime(c.created_at))}</time><span class="commentActions"><button type="button" class="commentEdit" data-action="editComment" data-comment-id="${c.id}" data-id="${entryId}" title="댓글 수정">✎</button><button type="button" class="commentDelete" data-action="deleteComment" data-comment-id="${c.id}" data-id="${entryId}" title="댓글 삭제">×</button></span></div>${editingCommentId===c.id?`<div class="commentEditor"><textarea data-edit-comment="${c.id}" maxlength="500" rows="3">${esc(editingCommentText)}</textarea><div><button type="button" data-action="cancelCommentEdit">취소</button><button type="button" data-action="saveCommentEdit" data-comment-id="${c.id}" data-id="${entryId}" ${savingCommentId===c.id?'disabled':''}>저장</button></div></div>`:`<div class="commentText">${esc(c.content)}</div>`}</div>`).join('')||'<div class="commentEmpty">아직 댓글이 없어요.</div>'}<div class="commentComposer"><select data-comment-author="${entryId}" aria-label="댓글 작성자"><option value="전혜나" ${author==='전혜나'?'selected':''}>전혜나</option><option value="오지용" ${author==='오지용'?'selected':''}>오지용</option></select><textarea data-comment-input="${entryId}" maxlength="500" rows="2" placeholder="댓글을 남겨 보세요..">${esc(commentDrafts[entryId]||'')}</textarea><button type="button" data-action="sendComment" data-id="${entryId}">남기기</button></div></div>`:''}</div>`;
 }
 async function sendComment(id,button){
   const field=document.querySelector(`[data-comment-input="${id}"]`);
@@ -94,6 +95,29 @@ async function deleteComment(id,commentId){
     if(!Array.isArray(rows)||rows.length!==1)throw new Error('Delete not confirmed');
     await refreshComments();
   }catch(e){console.error('Comment delete failed',e);alert('댓글 삭제에 실패했어.')}
+}
+function beginCommentEdit(entryId,commentId){
+  const c=(comments[entryId]||[]).find(x=>String(x.id)===String(commentId));
+  if(!c)return;
+  editingCommentId=c.id;editingCommentText=c.content;render();
+  const field=document.querySelector('[data-edit-comment="'+c.id+'"]');
+  if(field)field.focus();
+}
+function cancelCommentEdit(){editingCommentId=null;editingCommentText='';render();}
+async function saveCommentEdit(entryId,commentId){
+  if(savingCommentId!==null)return;
+  const content=editingCommentText.trim();
+  if(!content){alert('댓글 내용을 입력해 줘.');return;}
+  savingCommentId=commentId;
+  try{
+    const rows=await commentApi('?id=eq.'+encodeURIComponent(commentId)+'&entry_id=eq.'+encodeURIComponent(entryId),{
+      method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({content})
+    });
+    if(!Array.isArray(rows)||rows.length!==1)throw new Error('Comment update not confirmed');
+    editingCommentId=null;editingCommentText='';
+    await refreshComments();
+  }catch(e){console.error('Comment edit failed',e);alert('댓글 수정에 실패했어. Supabase 수정 권한을 확인해 줘.')}
+  finally{savingCommentId=null;}
 }
 function togglePast(n){expanded[n]=!expanded[n];render();}
 render();loadShared();
@@ -125,8 +149,11 @@ async function toggleHeart(id){
 $('.columns').addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b)return;if(b.dataset.action==='heart'){toggleHeart(b.dataset.id);return}
 if(b.dataset.action==='comments'){const id=b.dataset.id;commentsOpen[id]=!commentsOpen[id];render();return}
 if(b.dataset.action==='sendComment'){sendComment(b.dataset.id,b);return}
+if(b.dataset.action==='editComment'){beginCommentEdit(b.dataset.id,b.dataset.commentId);return}
+if(b.dataset.action==='cancelCommentEdit'){cancelCommentEdit();return}
+if(b.dataset.action==='saveCommentEdit'){saveCommentEdit(b.dataset.id,b.dataset.commentId);return}
 if(b.dataset.action==='deleteComment'){deleteComment(b.dataset.id,b.dataset.commentId);return}const n=b.dataset.who,i=Number(b.dataset.index);if(b.dataset.action==='edit')openEdit(n,i);else if(b.dataset.action==='delete')askDelete(n,i);else if(b.dataset.action==='more')togglePast(n);});
-$('.columns').addEventListener('input',e=>{const el=e.target;if(el.matches('[data-comment-input]'))commentDrafts[el.dataset.commentInput]=el.value});
+$('.columns').addEventListener('input',e=>{const el=e.target;if(el.matches('[data-comment-input]'))commentDrafts[el.dataset.commentInput]=el.value;if(el.matches('[data-edit-comment]'))editingCommentText=el.value});
 $('.columns').addEventListener('change',e=>{const el=e.target;if(el.matches('[data-comment-author]'))commentAuthors[el.dataset.commentAuthor]=el.value});
 $('#del').onclick=async()=>{if(!delTarget)return;let[n,i]=delTarget,e=data[n][i];if(!e)return;try{await api('?id=eq.'+encodeURIComponent(e[3]),{method:'DELETE',headers:{'Prefer':'return=minimal'}});delTarget=null;await loadShared();close()}catch(err){console.error('Supabase delete failed',err);alert('삭제에 실패했습니다. 잠시 후 다시 시도해주세요.')}};
 

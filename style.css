@@ -63,3 +63,9 @@
 .commentComposer select{max-width:100%;font-size:10px;color:#571437;background:#fff7fa;border:1px solid #dc83af;padding:4px}
 .commentComposer textarea{width:100%;min-width:0;resize:vertical;font:11px Arial,'Noto Sans KR',sans-serif;border:1px solid #dc83af;background:#fffafc;color:#571437;padding:5px}
 .commentComposer>button{margin-left:auto;border:2px outset #ffbad7;background:#ffd0e3;color:#79234e;font-size:10px;font-weight:700;padding:4px 9px}
+
+.commentActions{margin-left:auto;display:flex;align-items:center;gap:7px}
+.commentEdit,.commentDelete{background:transparent;border:0;color:#9e5c7b;font-size:13px;padding:1px 3px;cursor:pointer}
+.commentEditor textarea{box-sizing:border-box;width:100%;resize:vertical;font:11px Arial,sans-serif;border:1px solid #dc83af;background:#fffafc;color:#571437;padding:5px;margin-top:5px}
+.commentEditor>div{display:flex;justify-content:flex-end;gap:5px;margin-top:4px}
+.commentEditor button{border:2px outset #ffbad7;background:#ffd0e3;color:#79234e;font-size:10px;padding:3px 9px}
