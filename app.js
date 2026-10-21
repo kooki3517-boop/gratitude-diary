@@ -164,8 +164,8 @@ setInterval(refreshPhotos,15000);
 window.addEventListener('focus',refreshPhotos);
 function photoUrl(path){return SUPABASE_URL+'/storage/v1/object/public/gratitude-photos/'+path.split('/').map(encodeURIComponent).join('/')}
 function renderPhotos(id){const photos=entryPhotos[id]||[];return photos.length?`<div class="entryPhotos">${photos.map(p=>`<a href="${esc(photoUrl(p.storage_path))}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(photoUrl(p.storage_path))}" alt="감사일기 사진"></a>`).join('')}</div>`:''}
-function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}">삭제</button></div>`).join('')}
-function renderPendingPhotos(){const el=$('#pendingPhotoList');if(!el)return;el.innerHTML=pendingPhotos.map((p,i)=>`<div class="pendingPhoto"><img src="${esc(p.url)}" alt="선택한 사진 미리보기" class="photoPreview"><button type="button" data-remove-pending="${i}">×</button></div>`).join('')+removedPhotos.map(p=>`<div class="pendingPhoto"><span>삭제 예정: 사진</span><button type="button" data-undo-remove="${p.id}">취소</button></div>`).join('')}
+function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).filter(p=>!removedPhotos.some(r=>String(r.id)===String(p.id))).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
+function renderPendingPhotos(){const el=$('#pendingPhotoList');if(!el)return;el.innerHTML=pendingPhotos.map((p,i)=>`<div class="pendingPhoto"><img src="${esc(p.url)}" alt="선택한 사진 미리보기" class="photoPreview"><button type="button" data-remove-pending="${i}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
 function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
 async function filePhotos(files){
  for(const file of Array.from(files)){
@@ -187,7 +187,12 @@ async function uploadPhoto(file,entryId){
  try{await photoApi('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({entry_id:entryId,storage_path:path})})}
  catch(e){await fetch(PHOTO_BUCKET+'/'+path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}}).catch(()=>{});throw e}
 }
-async function removePhoto(p){await photoApi('?id=eq.'+p.id,{method:'DELETE',headers:{Prefer:'return=representation'}});await fetch(PHOTO_BUCKET+'/'+p.storage_path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}})}
+async function removePhoto(p){
+ const rows=await photoApi('?id=eq.'+encodeURIComponent(p.id),{method:'DELETE',headers:{Prefer:'return=representation'}});
+ if(!Array.isArray(rows)||rows.length!==1)throw Error('사진 삭제가 서버에 반영되지 않았어. 삭제 권한을 확인해 줘.');
+ // The database record is authoritative; storage cleanup is best effort.
+ fetch(PHOTO_BUCKET+'/'+p.storage_path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}}).catch(e=>console.warn('Storage cleanup failed',e));
+}
 function togglePast(n){expanded[n]=!expanded[n];render();}
 render();loadShared();refreshPhotos();
 function show(id){shade.classList.remove('hidden');$(id).classList.remove('hidden')}function close(){shade.classList.add('hidden');document.querySelectorAll('.dialog').forEach(x=>x.classList.add('hidden'))}document.querySelectorAll('.close,.cancel').forEach(x=>x.onclick=close);shade.onclick=close;
@@ -205,16 +210,38 @@ $('#save').onclick=async()=>{
   let failures=0;
   for(const p of pendingPhotos){try{await uploadPhoto(p.file,entryId)}catch(e){failures++;console.error(e)}}
   for(const p of removedPhotos){try{await removePhoto(p)}catch(e){failures++;console.error(e)}}
+  if(failures){await loadShared();await refreshPhotos();alert('사진 '+failures+'개의 추가 또는 삭제에 실패했어. 일기 수정 화면에서 다시 확인해 줘.');return;}
   await loadShared();await refreshPhotos();close();resetPhotoEditor();show('#savedPop');
   if(failures)alert('일기는 저장됐지만 사진 '+failures+'개 처리에 실패했어. Storage 설정을 확인해 줘.');
  }catch(e){console.error('Supabase save failed',e);alert('저장에 실패했습니다. 잠시 후 다시 시도해주세요.')}
  finally{btn.disabled=false}
 };
 $('#photoInput').addEventListener('change',e=>{filePhotos(e.target.files);e.target.value=''});
-$('#pendingPhotoList').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
- if(b.dataset.removeExisting){const photo=Object.values(entryPhotos).flat().find(p=>String(p.id)===b.dataset.removeExisting);if(photo&&!removedPhotos.some(p=>p.id===photo.id)){removedPhotos.push(photo);document.querySelector('[data-existing-photo=\"'+photo.id+'\"]')?.remove()}}
- if(b.dataset.removePending!==undefined){const p=pendingPhotos.splice(Number(b.dataset.removePending),1)[0];}
- if(b.dataset.undoRemove){removedPhotos=removedPhotos.filter(p=>String(p.id)!==b.dataset.undoRemove)}renderPendingPhotos()});
+function handlePhotoPreviewClick(e){
+ const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.removeExisting!==undefined){
+  const photo=Object.values(entryPhotos).flat().find(p=>String(p.id)===String(b.dataset.removeExisting));
+  if(photo&&!removedPhotos.some(p=>String(p.id)===String(photo.id))){
+   removedPhotos.push(photo);
+   renderExistingPhotos(photo.entry_id);
+   renderPendingPhotos();
+  }
+  return;
+ }
+ if(b.dataset.removePending!==undefined){
+  pendingPhotos.splice(Number(b.dataset.removePending),1);
+  renderPendingPhotos();
+  return;
+ }
+ if(b.dataset.undoRemove!==undefined){
+  const photo=removedPhotos.find(p=>String(p.id)===String(b.dataset.undoRemove));
+  removedPhotos=removedPhotos.filter(p=>String(p.id)!==String(b.dataset.undoRemove));
+  if(photo){const entryId=photo.entry_id;renderExistingPhotos(entryId)}
+  renderPendingPhotos();
+ }
+}
+$('#pendingPhotoList').addEventListener('click',handlePhotoPreviewClick);
+$('#existingPhotoList').addEventListener('click',handlePhotoPreviewClick);
 
 function askDelete(n,i){delTarget=[n,i];show('#confirm');}
 const heartSaving=new Set();

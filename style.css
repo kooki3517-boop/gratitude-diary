@@ -148,3 +148,25 @@
 #photoViewer .viewerCount{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);color:white;background:#32172899;padding:3px 10px;border-radius:15px;font-size:12px}
 #photoViewer button[hidden]{display:none}
 #photoViewer img{touch-action:pan-y}
+
+/* v49: discreet photo removal and viewer navigation */
+#pendingPhotoList .pendingPhoto button[data-remove-pending],
+#existingPhotoList .pendingPhoto button[data-remove-existing]{
+ position:absolute!important;top:3px!important;right:3px!important;
+ width:17px!important;height:17px!important;min-width:17px!important;min-height:17px!important;
+ padding:0!important;border:1px solid #d7b4c5!important;border-radius:50%!important;
+ background:rgba(255,249,252,.82)!important;color:#916d80!important;
+ font-size:13px!important;font-weight:400!important;line-height:14px!important;
+ box-shadow:none!important;opacity:.8!important;z-index:2;
+}
+#photoViewer .viewerPrev,#photoViewer .viewerNext{
+ width:24px!important;height:32px!important;border-radius:6px!important;
+ border:1px solid rgba(255,228,241,.28)!important;
+ background:rgba(50,26,43,.3)!important;color:rgba(255,247,252,.75)!important;
+ font-size:21px!important;font-weight:300!important;box-shadow:none!important;
+}
+#photoViewer .viewerPrev{left:7px!important}
+#photoViewer .viewerNext{right:7px!important}
+#photoViewer .viewerClose{width:25px!important;height:25px!important;border-radius:50%!important;
+ border:1px solid rgba(255,228,241,.3)!important;background:rgba(50,26,43,.35)!important;
+ color:rgba(255,247,252,.8)!important;font-size:18px!important;box-shadow:none!important}
