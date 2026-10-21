@@ -340,3 +340,13 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
    if(!likes[b.dataset.id]) play(); // ♡ -> ♥ only
  },true);
 })();
+
+/* v47: open saved photos in a size-limited viewer, rather than a new full-size browser tab */
+(function(){
+ const viewer=document.createElement('div');viewer.id='photoViewer';viewer.className='hidden';viewer.setAttribute('role','dialog');viewer.setAttribute('aria-label','사진 확대 보기');
+ viewer.innerHTML='<button type="button" aria-label="닫기">×</button><img alt="확대 사진">';document.body.appendChild(viewer);
+ function hide(){viewer.classList.add('hidden');viewer.querySelector('img').removeAttribute('src')}
+ document.addEventListener('click',function(e){const a=e.target.closest('.entryPhotos a');if(!a)return;e.preventDefault();viewer.querySelector('img').src=a.href;viewer.classList.remove('hidden')});
+ viewer.addEventListener('click',function(e){if(e.target!==viewer.querySelector('img'))hide()});
+ document.addEventListener('keydown',function(e){if(e.key==='Escape')hide()});
+})();

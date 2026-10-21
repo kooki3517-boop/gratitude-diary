@@ -131,3 +131,12 @@
 .entryPhotos{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:center!important;gap:10px!important;overflow:visible!important;padding:10px 7px!important}
 .entryPhotos a{display:block!important;width:100%;max-width:100%;flex:none!important}
 .entryPhotos img{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:none!important;margin:0 auto!important;object-fit:contain!important;border:3px solid #f4a6cf}
+
+/* v47: centered preview rows, including incomplete last rows */
+#pendingPhotoList,#existingPhotoList{display:flex!important;flex-wrap:wrap!important;justify-content:center!important;align-items:flex-start!important;gap:9px!important}
+#pendingPhotoList .pendingPhoto,#existingPhotoList .pendingPhoto{flex:0 0 calc((100% - 18px)/3)!important;width:calc((100% - 18px)/3)!important;max-width:calc((100% - 18px)/3)!important;box-sizing:border-box!important}
+/* v47: in-page photo viewer with restrained mobile dimensions */
+#photoViewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(29,15,26,.77);box-sizing:border-box}
+#photoViewer.hidden{display:none!important}
+#photoViewer img{display:block;max-width:85vw;max-height:75vh;width:auto;height:auto;object-fit:contain;border:3px solid #f4a6cf;background:#fff;box-shadow:0 8px 25px #17081466}
+#photoViewer button{position:absolute;top:16px;right:16px;width:32px;height:32px;border:1px solid #eab3d0;background:#fff0f8;color:#812450;font-size:22px;cursor:pointer}
