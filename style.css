@@ -92,3 +92,9 @@
 .photoAttach label{display:inline-flex!important;align-items:center;justify-content:center;width:34px;height:31px;padding:0!important;font-size:0!important;background:#ffe1ee;border:1px solid #b75b8a;color:#9e356a;box-shadow:1px 2px 0 #bb7196}
 .photoAttach label svg{display:block}
 .commentMeta{flex-wrap:wrap}.commentActions{flex-shrink:0}
+
+/* v41 photo previews and matching diary toolbar heart */
+.entryHead .icons{align-items:center;gap:5px}
+.entryHead .icons .heartBtn{min-width:18px!important;width:18px!important;height:20px!important;min-height:20px!important;display:inline-flex;align-items:center;justify-content:center}
+.entryHead .icons .diaryHeartSvg{width:15px;height:15px;display:block;flex-shrink:0}
+.pendingPhoto .photoPreview{display:block;width:62px;height:62px;object-fit:cover;border:1px solid #c979a5;background:#fff6fa}
