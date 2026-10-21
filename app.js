@@ -11,6 +11,7 @@ const COMMENTS_API=SUPABASE_URL+'/rest/v1/gratitude_comments';
 const PHOTO_API=SUPABASE_URL+'/rest/v1/gratitude_photos';
 const PHOTO_BUCKET=SUPABASE_URL+'/storage/v1/object/gratitude-photos';
 let commentsReady=false; let current='전혜나', edit=null, delTarget=null;
+function localToday(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function stamp(v){return v?new Date(v).toLocaleString('ko-KR',{hour12:false}).replace(/\. /g,'.').replace('. ',' '):''}
 function rowToEntry(r){const tail=String(r.gratitude_3??'').split('\n').filter(Boolean);return [r.entry_date,[r.gratitude_1,r.gratitude_2,...tail],stamp(r.updated_at),r.id]}
 async function api(path='',opts={}){const r=await fetch(API+path,{...opts,headers:{...API_HEADERS,...(opts.headers||{})}});if(!r.ok)throw new Error((await r.text())||('HTTP '+r.status));return r.status===204?null:await r.json()}
@@ -192,7 +193,7 @@ render();loadShared();refreshPhotos();
 function show(id){shade.classList.remove('hidden');$(id).classList.remove('hidden')}function close(){shade.classList.add('hidden');document.querySelectorAll('.dialog').forEach(x=>x.classList.add('hidden'))}document.querySelectorAll('.close,.cancel').forEach(x=>x.onclick=close);shade.onclick=close;
 function setWriteRows(vals=['','','']){const box=$('#writeRows');box.innerHTML='';const arr=vals.length>=3?vals:['','',''];arr.forEach((v,i)=>addWriteRow(v,i));}
 function addWriteRow(v='',i=null){const box=$('#writeRows'), n=i==null?box.children.length:i;const row=document.createElement('div');row.className='row';row.innerHTML=`<b>${n+1}</b><input class="gratitudeInput" value="${esc(v)}" placeholder="${n===0?'오늘 감사한 일을 적어 보세요':n===1?'적을수록 행복해집니다..':n===2?'지금 운명이 당신을 발견했어요.':n===9?'박수!':'..'}">`;box.appendChild(row);row.querySelector('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim()&&row===box.lastElementChild){e.preventDefault();addWriteRow();box.lastElementChild.querySelector('input').focus();}})}
-document.querySelectorAll('.plus').forEach(b=>b.onclick=()=>{current=b.dataset.who;edit=null;const who=$('#who');if(who)who.textContent=current;$('#date').value=new Date().toISOString().slice(0,10);setWriteRows();resetPhotoEditor();show('#write')});
+document.querySelectorAll('.plus').forEach(b=>b.onclick=()=>{current=b.dataset.who;edit=null;const who=$('#who');if(who)who.textContent=current;$('#date').value=localToday();setWriteRows();resetPhotoEditor();show('#write')});
 function openEdit(n,i){current=n;edit=i;let e=data[n][i];if(!e)return;const who=$('#who');if(who)who.textContent=n;$('#date').value=e[0];setWriteRows(e[1]);resetPhotoEditor();renderExistingPhotos(e[3]);show('#write');}
 $('#save').onclick=async()=>{
  const btn=$('#save'),vals=[...document.querySelectorAll('#writeRows .gratitudeInput')].map(x=>x.value.trim()).filter(Boolean),date=$('#date').value;
@@ -243,7 +244,31 @@ if(b.dataset.action==='saveCommentEdit'){saveCommentEdit(b.dataset.id,b.dataset.
 if(b.dataset.action==='deleteComment'){deleteComment(b.dataset.id,b.dataset.commentId);return}const n=b.dataset.who,i=Number(b.dataset.index);if(b.dataset.action==='edit')openEdit(n,i);else if(b.dataset.action==='delete')askDelete(n,i);else if(b.dataset.action==='more')togglePast(n);});
 $('.columns').addEventListener('input',e=>{const el=e.target;if(el.matches('[data-comment-input]'))commentDrafts[el.dataset.commentInput]=el.value;if(el.matches('[data-edit-comment]'))editingCommentText=el.value;});
 $('.columns').addEventListener('change',e=>{const el=e.target;if(el.matches('[data-comment-author]'))commentAuthors[el.dataset.commentAuthor]=el.value});
-$('#del').onclick=async()=>{if(!delTarget)return;let[n,i]=delTarget,e=data[n][i];if(!e)return;try{await api('?id=eq.'+encodeURIComponent(e[3]),{method:'DELETE',headers:{'Prefer':'return=minimal'}});delTarget=null;await loadShared();close()}catch(err){console.error('Supabase delete failed',err);alert('삭제에 실패했습니다. 잠시 후 다시 시도해주세요.')}};
+$('#del').onclick=async()=>{
+ if(!delTarget)return;
+ const [n,i]=delTarget,e=data[n][i];if(!e)return;
+ const btn=$('#del');btn.disabled=true;
+ try{
+  const entryId=e[3];
+  // Delete dependent photo rows first, so the entry is not blocked by the photo foreign key.
+  const photos=await photoApi('?select=id,storage_path&entry_id=eq.'+encodeURIComponent(entryId));
+  if(photos.length){
+   const deleted=await photoApi('?entry_id=eq.'+encodeURIComponent(entryId),{method:'DELETE',headers:{Prefer:'return=representation'}});
+   if(!Array.isArray(deleted)||deleted.length!==photos.length)throw Error('Photo records could not be removed');
+  }
+  // Comments may also reference the entry. Remove those before deleting the diary entry.
+  const existingComments=await commentApi('?select=id&entry_id=eq.'+encodeURIComponent(entryId));
+  if(existingComments.length){
+   const deletedComments=await commentApi('?entry_id=eq.'+encodeURIComponent(entryId),{method:'DELETE',headers:{Prefer:'return=representation'}});
+   if(!Array.isArray(deletedComments)||deletedComments.length!==existingComments.length)throw Error('Comments could not be removed');
+  }
+  const deletedEntries=await api('?id=eq.'+encodeURIComponent(entryId),{method:'DELETE',headers:{Prefer:'return=representation'}});
+  if(!Array.isArray(deletedEntries)||deletedEntries.length!==1)throw Error('Entry delete not confirmed');
+  // Storage cleanup after successful deletion; never block the confirmed diary deletion.
+  await Promise.allSettled(photos.map(p=>fetch(PHOTO_BUCKET+'/'+p.storage_path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}})));
+  delTarget=null;await loadShared();close();
+ }catch(err){console.error('Supabase delete failed',err);alert('삭제에 실패했어. 연결 상태 또는 사진·댓글 삭제 권한을 확인해 줘.')}finally{btn.disabled=false}
+};
 
 // Web Audio BGM: no HTMLMediaElement, to reduce system media playback notifications.
 const volume=$('#volume');
@@ -341,12 +366,19 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
  },true);
 })();
 
-/* v47: open saved photos in a size-limited viewer, rather than a new full-size browser tab */
+/* v48: swipe through saved photos belonging to the same diary entry */
 (function(){
  const viewer=document.createElement('div');viewer.id='photoViewer';viewer.className='hidden';viewer.setAttribute('role','dialog');viewer.setAttribute('aria-label','사진 확대 보기');
- viewer.innerHTML='<button type="button" aria-label="닫기">×</button><img alt="확대 사진">';document.body.appendChild(viewer);
- function hide(){viewer.classList.add('hidden');viewer.querySelector('img').removeAttribute('src')}
- document.addEventListener('click',function(e){const a=e.target.closest('.entryPhotos a');if(!a)return;e.preventDefault();viewer.querySelector('img').src=a.href;viewer.classList.remove('hidden')});
- viewer.addEventListener('click',function(e){if(e.target!==viewer.querySelector('img'))hide()});
- document.addEventListener('keydown',function(e){if(e.key==='Escape')hide()});
+ viewer.innerHTML='<button type="button" class="viewerClose" aria-label="닫기">×</button><button type="button" class="viewerPrev" aria-label="이전 사진">‹</button><img alt="확대 사진"><button type="button" class="viewerNext" aria-label="다음 사진">›</button><span class="viewerCount"></span>';
+ document.body.appendChild(viewer);
+ let urls=[],index=0,touchStart=null;
+ const img=viewer.querySelector('img');
+ function update(){if(!urls.length)return;img.src=urls[index];viewer.querySelector('.viewerCount').textContent=(index+1)+' / '+urls.length;viewer.querySelector('.viewerPrev').hidden=urls.length<2;viewer.querySelector('.viewerNext').hidden=urls.length<2;}
+ function move(delta){if(!urls.length)return;index=(index+delta+urls.length)%urls.length;update()}
+ function hide(){viewer.classList.add('hidden');img.removeAttribute('src');urls=[]}
+ document.addEventListener('click',e=>{const a=e.target.closest('.entryPhotos a');if(!a)return;e.preventDefault();const group=a.closest('.entryPhotos');urls=[...group.querySelectorAll('a')].map(el=>el.href);index=Math.max(0,[...group.querySelectorAll('a')].indexOf(a));update();viewer.classList.remove('hidden')});
+ viewer.addEventListener('click',e=>{if(e.target.closest('.viewerPrev')){move(-1);return}if(e.target.closest('.viewerNext')){move(1);return}if(e.target===viewer||e.target.closest('.viewerClose'))hide()});
+ viewer.addEventListener('touchstart',e=>{if(e.touches.length===1)touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY}},{passive:true});
+ viewer.addEventListener('touchend',e=>{if(!touchStart||e.changedTouches.length!==1)return;const dx=e.changedTouches[0].clientX-touchStart.x,dy=e.changedTouches[0].clientY-touchStart.y;touchStart=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.2)move(dx<0?1:-1)},{passive:true});
+ document.addEventListener('keydown',e=>{if(viewer.classList.contains('hidden'))return;if(e.key==='Escape')hide();if(e.key==='ArrowLeft')move(-1);if(e.key==='ArrowRight')move(1)});
 })();

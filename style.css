@@ -140,3 +140,11 @@
 #photoViewer.hidden{display:none!important}
 #photoViewer img{display:block;max-width:85vw;max-height:75vh;width:auto;height:auto;object-fit:contain;border:3px solid #f4a6cf;background:#fff;box-shadow:0 8px 25px #17081466}
 #photoViewer button{position:absolute;top:16px;right:16px;width:32px;height:32px;border:1px solid #eab3d0;background:#fff0f8;color:#812450;font-size:22px;cursor:pointer}
+
+/* v48 photo viewer controls */
+#photoViewer .viewerPrev,#photoViewer .viewerNext{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:44px;border-radius:8px;background:#fff4fae8;font-size:30px;line-height:1;z-index:2}
+#photoViewer .viewerPrev{left:8px;right:auto}
+#photoViewer .viewerNext{right:8px;left:auto}
+#photoViewer .viewerCount{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);color:white;background:#32172899;padding:3px 10px;border-radius:15px;font-size:12px}
+#photoViewer button[hidden]{display:none}
+#photoViewer img{touch-action:pan-y}
