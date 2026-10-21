@@ -84,3 +84,11 @@
 .replyComposer button{background:#ffd2e7;color:#7d2855;border:1px solid #d68bb4;margin:4px}
 .commentLike{border:0;background:transparent;color:#a75480;cursor:pointer}
 .commentLike.liked{color:#e22948}
+
+/* v40: stable diary heart and compact photo picker */
+.heartBtn{display:inline-flex!important;align-items:center;justify-content:center;min-width:23px;width:23px;height:25px;padding:0!important;line-height:1!important}
+.diaryHeartSvg{display:block;flex:none;overflow:visible}
+.photoAttach{text-align:center;padding:7px!important}
+.photoAttach label{display:inline-flex!important;align-items:center;justify-content:center;width:34px;height:31px;padding:0!important;font-size:0!important;background:#ffe1ee;border:1px solid #b75b8a;color:#9e356a;box-shadow:1px 2px 0 #bb7196}
+.photoAttach label svg{display:block}
+.commentMeta{flex-wrap:wrap}.commentActions{flex-shrink:0}
