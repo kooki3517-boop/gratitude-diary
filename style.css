@@ -69,3 +69,18 @@
 .commentEditor textarea{box-sizing:border-box;width:100%;resize:vertical;font:11px Arial,sans-serif;border:1px solid #dc83af;background:#fffafc;color:#571437;padding:5px;margin-top:5px}
 .commentEditor>div{display:flex;justify-content:flex-end;gap:5px;margin-top:4px}
 .commentEditor button{border:2px outset #ffbad7;background:#ffd0e3;color:#79234e;font-size:10px;padding:3px 9px}
+
+/* Optional diary photos and nested comments */
+.photoAttach{margin:12px 0;padding:8px;border:1px dashed #d978ad;background:#fff0f7;color:#842b59}
+.photoAttach label{display:inline-block;padding:6px 12px;background:#ffd0e5;border:2px outset #f8a6cf;cursor:pointer;font-weight:bold}
+.photoAttach input{position:absolute;width:1px;height:1px;opacity:0}
+.pendingPhoto{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;font-size:12px;overflow-wrap:anywhere}
+.pendingPhoto button{border:1px solid #b9578d;background:#ffe2f0;color:#812450}
+.entryPhotos{display:flex;gap:6px;overflow-x:auto;padding:8px 5px;scroll-snap-type:x mandatory}
+.entryPhotos a{flex:0 0 auto;scroll-snap-align:start}
+.entryPhotos img{height:110px;max-width:180px;object-fit:cover;border:3px solid #f4a6cf;background:#fff;display:block}
+.replyItem{margin-left:14px;padding-left:9px;border-left:2px solid #eaa3c9}
+.replyComposer textarea{width:100%;box-sizing:border-box;background:#fffafc;border:1px solid #da89b3;color:#672449}
+.replyComposer button{background:#ffd2e7;color:#7d2855;border:1px solid #d68bb4;margin:4px}
+.commentLike{border:0;background:transparent;color:#a75480;cursor:pointer}
+.commentLike.liked{color:#e22948}
