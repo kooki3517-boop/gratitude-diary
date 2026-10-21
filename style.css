@@ -119,3 +119,7 @@
 .entryHead .icons .miniIcon,.commentActions .miniIcon{width:12px!important;height:12px!important;min-width:12px!important;min-height:12px!important;display:block!important;flex:none!important;stroke:#91416a;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;fill:none}
 .entryHead .icons .heartBtn.liked .miniIcon{stroke:#e32636}
 .commentActions{gap:4px!important}
+
+/* v45: 11px for diary and comment icons; preserve heart's SVG fill color */
+.entryHead .icons .miniIcon,.commentActions .miniIcon{width:11px!important;height:11px!important;min-width:11px!important;min-height:11px!important}
+
