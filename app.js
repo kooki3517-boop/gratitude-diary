@@ -51,7 +51,7 @@ function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function render(){
   [['전혜나','#hEntries'],['오지용','#jEntries']].forEach(([n,id])=>{
     const all=data[n]||[], visible=expanded[n]?all:all.slice(0,1);
-    $(id).innerHTML=visible.map((e,i)=>`<article class="entry"><div class="entryHead">${e[0].replaceAll('-','.')} (${['일','월','화','수','목','금','토'][new Date(e[0]+'T12:00').getDay()]})<span class="icons"><button class="heartBtn ${likes[e[3]]?'liked':''}" type="button" title="좋아요" aria-label="좋아요" data-action="heart" data-id="${e[3]}"><svg class="diaryHeartSvg" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z" fill="${likes[e[3]]?'#e32636':'none'}" stroke="${likes[e[3]]?'#e32636':'#9b5574'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="editBtn" type="button" title="수정" aria-label="수정" data-action="edit" data-who="${n}" data-index="${i}">✎</button><button class="deleteBtn" type="button" title="삭제" aria-label="삭제" data-action="delete" data-who="${n}" data-index="${i}">⌫</button></span></div><ol>${e[1].map(x=>`<li>${esc(x)}</li>`).join('')}</ol><div class="saved">◷ 마지막 저장 ${e[2]||e[0].replaceAll('-','.')+' 21:46'}</div>${renderPhotos(e[3])}${renderCommentBox(e[3],n)}</article>`).join('')+(all.length>1?`<button class="moreDiary" type="button" data-action="more" data-who="${n}">${expanded[n]?'지난 일기 접기':'지난 일기 더보기'} ${expanded[n]?'▲':'▼'}</button>`:'');
+    $(id).innerHTML=visible.map((e,i)=>`<article class="entry"><div class="entryHead">${e[0].replaceAll('-','.')} (${['일','월','화','수','목','금','토'][new Date(e[0]+'T12:00').getDay()]})<span class="icons"><button class="heartBtn ${likes[e[3]]?'liked':''}" type="button" title="좋아요" aria-label="좋아요" data-action="heart" data-id="${e[3]}"><svg class="diaryHeartSvg" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z" fill="${likes[e[3]]?'#e32636':'none'}" stroke="${likes[e[3]]?'#e32636':'#9b5574'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="editBtn" type="button" title="수정" aria-label="수정" data-action="edit" data-who="${n}" data-index="${i}">✎</button><button class="deleteBtn" type="button" title="삭제" aria-label="삭제" data-action="delete" data-who="${n}" data-index="${i}">⌫</button></span></div><ol>${e[1].map(x=>`<li>${esc(x)}</li>`).join('')}</ol><div class="saved">◷ 마지막 저장 ${e[2]||e[0].replaceAll('-','.')+' 21:46'}</div>${renderPhotos(e[3])}${renderCommentBox(e[3],n)}</article>`).join('')+(all.length>1?`<button class="moreDiary" type="button" data-action="more" data-who="${n}">${expanded[n]?'지난 일기 접기':'지난 일기 더보기'} ${expanded[n]?'▲':'▼'}</button>`:'');
   });
 }
 function commentTime(v){try{return new Date(v).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})}catch(_){return ''}}
@@ -156,8 +156,19 @@ function photoUrl(path){return SUPABASE_URL+'/storage/v1/object/public/gratitude
 function renderPhotos(id){const photos=entryPhotos[id]||[];return photos.length?`<div class="entryPhotos">${photos.map(p=>`<a href="${esc(photoUrl(p.storage_path))}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(photoUrl(p.storage_path))}" alt="감사일기 사진"></a>`).join('')}</div>`:''}
 function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}">삭제</button></div>`).join('')}
 function renderPendingPhotos(){const el=$('#pendingPhotoList');if(!el)return;el.innerHTML=pendingPhotos.map((p,i)=>`<div class="pendingPhoto"><img src="${esc(p.url)}" alt="선택한 사진 미리보기" class="photoPreview"><button type="button" data-remove-pending="${i}">×</button></div>`).join('')+removedPhotos.map(p=>`<div class="pendingPhoto"><span>삭제 예정: 사진</span><button type="button" data-undo-remove="${p.id}">취소</button></div>`).join('')}
-function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos.forEach(p=>URL.revokeObjectURL(p.url));pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
-function filePhotos(files){for(const file of files){if(!file.type.startsWith('image/'))continue;if(file.size>10*1024*1024){alert('사진은 한 장당 10MB 이하로 선택해 줘.');continue}pendingPhotos.push({file,url:URL.createObjectURL(file)})}renderPendingPhotos()}
+function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
+async function filePhotos(files){
+ for(const file of Array.from(files)){
+  if(!file.type.startsWith('image/')&&!/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name))continue;
+  if(file.size>10*1024*1024){alert('사진은 한 장당 10MB 이하로 선택해 줘.');continue}
+  try{
+   const url=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});
+   const img=new Image();
+   await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Unsupported image format'));img.src=url});
+   pendingPhotos.push({file,url});renderPendingPhotos();
+  }catch(err){console.error('Photo preview failed',err);alert('이 사진은 브라우저에서 표시할 수 없어. 갤러리에서 JPG 또는 PNG 사진으로 선택해 줘.')}
+ }
+}
 async function uploadPhoto(file,entryId){
  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
  const path=entryId+'/'+crypto.randomUUID()+'.'+ext;
@@ -192,7 +203,7 @@ $('#save').onclick=async()=>{
 $('#photoInput').addEventListener('change',e=>{filePhotos(e.target.files);e.target.value=''});
 $('#pendingPhotoList').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
  if(b.dataset.removeExisting){const photo=Object.values(entryPhotos).flat().find(p=>String(p.id)===b.dataset.removeExisting);if(photo&&!removedPhotos.some(p=>p.id===photo.id)){removedPhotos.push(photo);document.querySelector('[data-existing-photo=\"'+photo.id+'\"]')?.remove()}}
- if(b.dataset.removePending!==undefined){const p=pendingPhotos.splice(Number(b.dataset.removePending),1)[0];if(p)URL.revokeObjectURL(p.url)}
+ if(b.dataset.removePending!==undefined){const p=pendingPhotos.splice(Number(b.dataset.removePending),1)[0];}
  if(b.dataset.undoRemove){removedPhotos=removedPhotos.filter(p=>String(p.id)!==b.dataset.undoRemove)}renderPendingPhotos()});
 
 function askDelete(n,i){delTarget=[n,i];show('#confirm');}

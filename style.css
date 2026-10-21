@@ -98,3 +98,7 @@
 .entryHead .icons .heartBtn{min-width:18px!important;width:18px!important;height:20px!important;min-height:20px!important;display:inline-flex;align-items:center;justify-content:center}
 .entryHead .icons .diaryHeartSvg{width:15px;height:15px;display:block;flex-shrink:0}
 .pendingPhoto .photoPreview{display:block;width:62px;height:62px;object-fit:cover;border:1px solid #c979a5;background:#fff6fa}
+
+/* v42 smaller consistent diary heart */
+.entryHead .icons .heartBtn{width:15px!important;min-width:15px!important;height:19px!important;min-height:19px!important}
+.entryHead .icons .diaryHeartSvg{width:12px!important;height:12px!important}
