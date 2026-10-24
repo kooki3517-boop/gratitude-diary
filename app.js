@@ -207,36 +207,60 @@ document.addEventListener('error',e=>{
 function renderPhotos(id){const photos=entryPhotos[id]||[];return photos.length?`<div class="entryPhotos">${photos.map(p=>`<a href="${esc(photoUrl(p.storage_path))}" target="_blank" rel="noopener"><img loading="lazy" data-storage-path="${esc(p.storage_path)}" src="${esc(photoUrl(p.storage_path))}" alt="감사일기 사진"></a>`).join('')}</div>`:''}
 function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).filter(p=>!removedPhotos.some(r=>String(r.id)===String(p.id))).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img data-storage-path="${esc(p.storage_path)}" src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
 function renderPendingPhotos(){const el=$('#pendingPhotoList');if(!el)return;el.innerHTML=pendingPhotos.map((p,i)=>`<div class="pendingPhoto"><img src="${esc(p.url)}" alt="선택한 사진 미리보기" class="photoPreview"><button type="button" data-remove-pending="${i}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
-function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
+function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos.forEach(p=>{if(p.url?.startsWith('blob:'))URL.revokeObjectURL(p.url)});pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
+// Decode images on-device and upload a real JPEG Blob. This also avoids
+// iOS Photos file-provider zero-byte/HEIC upload inconsistencies.
+async function preparePhoto(file){
+ if(!file)throw Error('사진을 선택하지 않았어.');
+ const imageUrl=URL.createObjectURL(file);
+ try{
+  const img=new Image();
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('사진 형식을 읽을 수 없어. 아이폰에서 JPG로 저장한 뒤 다시 선택해 줘.'));img.src=imageUrl});
+  const width=img.naturalWidth,height=img.naturalHeight;
+  if(!width||!height)throw Error('사진의 크기를 읽을 수 없어.');
+  const scale=Math.min(1,2048/Math.max(width,height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
+  const ctx=canvas.getContext('2d');if(!ctx)throw Error('사진 변환을 시작할 수 없어.');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b&&b.size?resolve(b):reject(Error('사진 변환에 실패했어.')), 'image/jpeg',0.88));
+  if(!blob.size)throw Error('사진 파일이 비어 있어.');
+  const preview=URL.createObjectURL(blob);
+  return {file:blob,url:preview};
+ }finally{URL.revokeObjectURL(imageUrl)}
+}
 async function filePhotos(files){
- for(const file of Array.from(files)){
+ for(const file of Array.from(files||[])){
   if(!file.type.startsWith('image/')&&!/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name))continue;
-  if(file.size===0){alert('용량이 0바이트인 사진은 올릴 수 없어. 원본 사진을 다시 선택해 줘.');continue}
-  if(/\.(heic|heif)$/i.test(file.name)||/image\/hei[cf]/i.test(file.type)){alert('아이폰 HEIC 사진은 JPG로 변환한 뒤 선택해 줘. 아이폰 설정 → 카메라 → 포맷 → 높은 호환성을 선택하면 앞으로 찍는 사진은 JPG로 저장돼.');continue}
-  if(file.size>10*1024*1024){alert('사진은 한 장당 10MB 이하로 선택해 줘.');continue}
   try{
-   const url=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});
-   const img=new Image();
-   await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Unsupported image format'));img.src=url});
-   pendingPhotos.push({file,url});renderPendingPhotos();
-  }catch(err){console.error('Photo preview failed',err);alert('이 사진은 브라우저에서 표시할 수 없어. 갤러리에서 JPG 또는 PNG 사진으로 선택해 줘.')}
+   const photo=await preparePhoto(file);
+   pendingPhotos.push(photo);renderPendingPhotos();
+  }catch(err){console.error('Photo preparation failed',err);alert(err.message||'사진을 처리하지 못했어. 다른 사진을 선택해 줘.')}
  }
 }
 async function uploadPhoto(file,entryId){
- if(!file || !file.size)throw Error('빈 사진 파일은 업로드할 수 없어.');
- const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
- const path=entryId+'/'+crypto.randomUUID()+'.'+ext;
- const r=await fetch(PHOTO_BUCKET+'/'+path,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':file.type,'x-upsert':'false'},body:file});
- if(!r.ok)throw Error('Photo upload: '+await r.text());
- // Confirm the public object contains real image bytes before adding its database record.
+ if(!file||!file.size)throw Error('업로드할 사진이 비어 있어.');
+ const path=entryId+'/'+crypto.randomUUID()+'.jpg';
+ const r=await fetch(PHOTO_BUCKET+'/'+path,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'image/jpeg','x-upsert':'false'},body:file,cache:'no-store'});
+ if(!r.ok)throw Error('사진 업로드 HTTP '+r.status+': '+(await r.text()).slice(0,220));
  const publicUrl=photoUrl(path);
- const check=await fetch(publicUrl,{cache:'no-store'});
- if(!check.ok){throw Error('사진 파일 확인 실패: HTTP '+check.status)}
- const stored=await check.blob();
- if(stored.size===0){throw Error('사진이 서버에 0바이트로 저장됐어. 원본을 다시 선택해 줘.')}
- if(stored.size!==file.size){throw Error('서버에 저장된 사진 용량이 원본과 달라. 다시 시도해 줘.')}
- try{await photoApi('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({entry_id:entryId,storage_path:path})})}
- catch(e){await fetch(PHOTO_BUCKET+'/'+path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}}).catch(()=>{});throw e}
+ // Allow storage's public read endpoint a brief moment to become available.
+ let stored=null,lastError='';
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   const check=await fetch(publicUrl+'?verify='+Date.now()+'-'+attempt,{cache:'no-store'});
+   if(!check.ok)throw Error('HTTP '+check.status);
+   stored=await check.blob();
+   if(stored.size===file.size)break;
+   lastError='저장된 파일 크기 '+stored.size+'바이트 / 원본 '+file.size+'바이트';
+  }catch(e){lastError=e.message}
+  if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+ }
+ if(!stored||stored.size!==file.size)throw Error('사진 저장 검증 실패: '+lastError);
+ try{
+  await photoApi('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({entry_id:entryId,storage_path:path})});
+ }catch(e){throw Error('사진 기록 저장 실패: '+e.message)}
 }
 async function removePhoto(p){
  const rows=await photoApi('?id=eq.'+encodeURIComponent(p.id),{method:'DELETE',headers:{Prefer:'return=representation'}});
@@ -253,7 +277,7 @@ document.querySelectorAll('.plus').forEach(b=>b.onclick=()=>{current=b.dataset.w
 function openEdit(n,i){current=n;edit=i;let e=data[n][i];if(!e)return;const who=$('#who');if(who)who.textContent=n;$('#date').value=e[0];setWriteRows(e[1]);resetPhotoEditor();renderExistingPhotos(e[3]);show('#write');}
 $('#save').onclick=async()=>{
  const btn=$('#save'),vals=[...document.querySelectorAll('#writeRows .gratitudeInput')].map(x=>x.value.trim()).filter(Boolean),date=$('#date').value;
- if(!date||vals.length<3)return;btn.disabled=true;
+ if(!date||vals.length<3){alert('날짜와 감사한 일 3개를 입력해 줘.');return;}btn.disabled=true;
  try{
   const body={person:current,entry_date:date,gratitude_1:vals[0],gratitude_2:vals[1],gratitude_3:vals.slice(2).join('\n'),updated_at:new Date().toISOString()};
   const oldEntryId=edit!==null?data[current]?.[edit]?.[3]:null;
@@ -261,13 +285,13 @@ $('#save').onclick=async()=>{
    ?await api('?id=eq.'+encodeURIComponent(oldEntryId),{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(body)})
    :await api('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(body)});
   const entryId=rows?.[0]?.id;if(!entryId)throw Error('Entry id missing');
-  let failures=0;
-  for(const p of pendingPhotos){try{await uploadPhoto(p.file,entryId)}catch(e){failures++;console.error(e)}}
-  for(const p of removedPhotos){try{await removePhoto(p)}catch(e){failures++;console.error(e)}}
-  if(failures){await loadShared();await refreshPhotos();alert('사진 '+failures+'개의 추가 또는 삭제에 실패했어. 일기 수정 화면에서 다시 확인해 줘.');return;}
+  let failures=0,photoErrors=[];
+  for(const p of pendingPhotos){try{await uploadPhoto(p.file,entryId)}catch(e){failures++;photoErrors.push(e.message);console.error(e)}}
+  for(const p of removedPhotos){try{await removePhoto(p)}catch(e){failures++;photoErrors.push(e.message);console.error(e)}}
+  if(failures){await loadShared();await refreshPhotos();alert('일기 내용은 저장됐지만 사진 '+failures+'개 처리에 실패했어.\n'+photoErrors.slice(0,2).join('\n'));return;}
   await loadShared();await refreshPhotos();close();resetPhotoEditor();show('#savedPop');
   if(failures)alert('일기는 저장됐지만 사진 '+failures+'개 처리에 실패했어. Storage 설정을 확인해 줘.');
- }catch(e){console.error('Supabase save failed',e);alert('저장에 실패했습니다. 잠시 후 다시 시도해주세요.')}
+ }catch(e){console.error('Supabase save failed',e);alert('일기 저장 실패: '+(e.message||'알 수 없는 오류'))}
  finally{btn.disabled=false}
 };
 $('#photoInput').addEventListener('change',e=>{filePhotos(e.target.files);e.target.value=''});
@@ -283,7 +307,7 @@ function handlePhotoPreviewClick(e){
   return;
  }
  if(b.dataset.removePending!==undefined){
-  pendingPhotos.splice(Number(b.dataset.removePending),1);
+  const removed=pendingPhotos.splice(Number(b.dataset.removePending),1)[0];if(removed?.url?.startsWith('blob:'))URL.revokeObjectURL(removed.url);
   renderPendingPhotos();
   return;
  }
