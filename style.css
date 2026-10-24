@@ -170,3 +170,6 @@
 #photoViewer .viewerClose{width:25px!important;height:25px!important;border-radius:50%!important;
  border:1px solid rgba(255,228,241,.3)!important;background:rgba(50,26,43,.35)!important;
  color:rgba(255,247,252,.8)!important;font-size:18px!important;box-shadow:none!important}
+
+/* v51: unobtrusive fallback for inaccessible stored images */
+.entryPhotos img.photoLoadFailed{min-height:48px;max-height:80px;object-fit:contain;font-size:11px;color:#92556e;background:#fff5fa}

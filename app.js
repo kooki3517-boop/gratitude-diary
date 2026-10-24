@@ -163,8 +163,49 @@ async function refreshPhotos(){
 setInterval(refreshPhotos,15000);
 window.addEventListener('focus',refreshPhotos);
 function photoUrl(path){return SUPABASE_URL+'/storage/v1/object/public/gratitude-photos/'+path.split('/').map(encodeURIComponent).join('/')}
-function renderPhotos(id){const photos=entryPhotos[id]||[];return photos.length?`<div class="entryPhotos">${photos.map(p=>`<a href="${esc(photoUrl(p.storage_path))}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(photoUrl(p.storage_path))}" alt="감사일기 사진"></a>`).join('')}</div>`:''}
-function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).filter(p=>!removedPhotos.some(r=>String(r.id)===String(p.id))).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
+// When a photo cannot be loaded publicly, try the authenticated Storage endpoint.
+// This also diagnoses a missing object separately from a private bucket.
+const recoveredPhotoUrls=new Map();
+const photoRecoveryInFlight=new Map();
+async function recoverPhotoUrl(path){
+ if(recoveredPhotoUrls.has(path))return recoveredPhotoUrls.get(path);
+ if(photoRecoveryInFlight.has(path))return photoRecoveryInFlight.get(path);
+ const task=(async()=>{
+  const encoded=path.split('/').map(encodeURIComponent).join('/');
+  const endpoint=SUPABASE_URL+'/storage/v1/object/authenticated/gratitude-photos/'+encoded;
+  const r=await fetch(endpoint,{headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY},cache:'no-store'});
+  if(!r.ok)throw new Error('Storage '+r.status+': '+(await r.text()).slice(0,250));
+  const blob=await r.blob();
+  if(!blob.type.startsWith('image/'))throw new Error('Stored file is not an image');
+  const url=URL.createObjectURL(blob);
+  recoveredPhotoUrls.set(path,url);
+  return url;
+ })();
+ photoRecoveryInFlight.set(path,task);
+ try{return await task}finally{photoRecoveryInFlight.delete(path)}
+}
+async function handleBrokenPhoto(img){
+ if(img.dataset.recoveryAttempted)return;
+ img.dataset.recoveryAttempted='1';
+ const path=img.dataset.storagePath;
+ if(!path)return;
+ try{
+  const url=await recoverPhotoUrl(path);
+  img.src=url;
+  const link=img.closest('a');if(link)link.href=url;
+ }catch(err){
+  console.warn('Photo cannot be loaded:',path,err);
+  img.removeAttribute('src');
+  img.alt='사진을 불러오지 못했어요';
+  img.classList.add('photoLoadFailed');
+  const link=img.closest('a');if(link){link.removeAttribute('href');link.setAttribute('aria-disabled','true')}
+ }
+}
+document.addEventListener('error',e=>{
+ if(e.target instanceof HTMLImageElement && e.target.dataset.storagePath)handleBrokenPhoto(e.target);
+},true);
+function renderPhotos(id){const photos=entryPhotos[id]||[];return photos.length?`<div class="entryPhotos">${photos.map(p=>`<a href="${esc(photoUrl(p.storage_path))}" target="_blank" rel="noopener"><img loading="lazy" data-storage-path="${esc(p.storage_path)}" src="${esc(photoUrl(p.storage_path))}" alt="감사일기 사진"></a>`).join('')}</div>`:''}
+function renderExistingPhotos(entryId){const box=$('#existingPhotoList');box.innerHTML=(entryPhotos[entryId]||[]).filter(p=>!removedPhotos.some(r=>String(r.id)===String(p.id))).map(p=>`<div class="pendingPhoto" data-existing-photo="${p.id}"><img data-storage-path="${esc(p.storage_path)}" src="${esc(photoUrl(p.storage_path))}" alt="첨부 사진" style="width:54px;height:54px;object-fit:cover"><button type="button" data-remove-existing="${p.id}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
 function renderPendingPhotos(){const el=$('#pendingPhotoList');if(!el)return;el.innerHTML=pendingPhotos.map((p,i)=>`<div class="pendingPhoto"><img src="${esc(p.url)}" alt="선택한 사진 미리보기" class="photoPreview"><button type="button" data-remove-pending="${i}" aria-label="이 사진 삭제" title="이 사진 삭제">×</button></div>`).join('')}
 function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHTML='';pendingPhotos=[];removedPhotos=[];renderPendingPhotos()}
 async function filePhotos(files){
@@ -184,6 +225,10 @@ async function uploadPhoto(file,entryId){
  const path=entryId+'/'+crypto.randomUUID()+'.'+ext;
  const r=await fetch(PHOTO_BUCKET+'/'+path,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':file.type,'x-upsert':'false'},body:file});
  if(!r.ok)throw Error('Photo upload: '+await r.text());
+ // Verify that the uploaded file is readable before recording its metadata.
+ // If SELECT is restricted, the original upload still succeeds; don't reject on 403.
+ const check=await fetch(SUPABASE_URL+'/storage/v1/object/public/gratitude-photos/'+path.split('/').map(encodeURIComponent).join('/'),{cache:'no-store'}).catch(()=>null);
+ if(check && check.status===404)console.warn('Uploaded photo is not accessible through public Storage URL:',path);
  try{await photoApi('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({entry_id:entryId,storage_path:path})})}
  catch(e){await fetch(PHOTO_BUCKET+'/'+path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}}).catch(()=>{});throw e}
 }
@@ -403,7 +448,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
  function update(){if(!urls.length)return;img.src=urls[index];viewer.querySelector('.viewerCount').textContent=(index+1)+' / '+urls.length;viewer.querySelector('.viewerPrev').hidden=urls.length<2;viewer.querySelector('.viewerNext').hidden=urls.length<2;}
  function move(delta){if(!urls.length)return;index=(index+delta+urls.length)%urls.length;update()}
  function hide(){viewer.classList.add('hidden');img.removeAttribute('src');urls=[]}
- document.addEventListener('click',e=>{const a=e.target.closest('.entryPhotos a');if(!a)return;e.preventDefault();const group=a.closest('.entryPhotos');urls=[...group.querySelectorAll('a')].map(el=>el.href);index=Math.max(0,[...group.querySelectorAll('a')].indexOf(a));update();viewer.classList.remove('hidden')});
+ document.addEventListener('click',e=>{const a=e.target.closest('.entryPhotos a');if(!a)return;e.preventDefault();if(!a.getAttribute('href'))return;const group=a.closest('.entryPhotos');const links=[...group.querySelectorAll('a[href]')];urls=links.map(el=>el.href);index=Math.max(0,links.indexOf(a));update();viewer.classList.remove('hidden')});
  viewer.addEventListener('click',e=>{if(e.target.closest('.viewerPrev')){move(-1);return}if(e.target.closest('.viewerNext')){move(1);return}if(e.target===viewer||e.target.closest('.viewerClose'))hide()});
  viewer.addEventListener('touchstart',e=>{if(e.touches.length===1)touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY}},{passive:true});
  viewer.addEventListener('touchend',e=>{if(!touchStart||e.changedTouches.length!==1)return;const dx=e.changedTouches[0].clientX-touchStart.x,dy=e.changedTouches[0].clientY-touchStart.y;touchStart=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.2)move(dx<0?1:-1)},{passive:true});
