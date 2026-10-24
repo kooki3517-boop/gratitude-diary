@@ -211,6 +211,8 @@ function resetPhotoEditor(){const box=$('#existingPhotoList');if(box)box.innerHT
 async function filePhotos(files){
  for(const file of Array.from(files)){
   if(!file.type.startsWith('image/')&&!/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name))continue;
+  if(file.size===0){alert('용량이 0바이트인 사진은 올릴 수 없어. 원본 사진을 다시 선택해 줘.');continue}
+  if(/\.(heic|heif)$/i.test(file.name)||/image\/hei[cf]/i.test(file.type)){alert('아이폰 HEIC 사진은 JPG로 변환한 뒤 선택해 줘. 아이폰 설정 → 카메라 → 포맷 → 높은 호환성을 선택하면 앞으로 찍는 사진은 JPG로 저장돼.');continue}
   if(file.size>10*1024*1024){alert('사진은 한 장당 10MB 이하로 선택해 줘.');continue}
   try{
    const url=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});
@@ -221,14 +223,18 @@ async function filePhotos(files){
  }
 }
 async function uploadPhoto(file,entryId){
+ if(!file || !file.size)throw Error('빈 사진 파일은 업로드할 수 없어.');
  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
  const path=entryId+'/'+crypto.randomUUID()+'.'+ext;
  const r=await fetch(PHOTO_BUCKET+'/'+path,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':file.type,'x-upsert':'false'},body:file});
  if(!r.ok)throw Error('Photo upload: '+await r.text());
- // Verify that the uploaded file is readable before recording its metadata.
- // If SELECT is restricted, the original upload still succeeds; don't reject on 403.
- const check=await fetch(SUPABASE_URL+'/storage/v1/object/public/gratitude-photos/'+path.split('/').map(encodeURIComponent).join('/'),{cache:'no-store'}).catch(()=>null);
- if(check && check.status===404)console.warn('Uploaded photo is not accessible through public Storage URL:',path);
+ // Confirm the public object contains real image bytes before adding its database record.
+ const publicUrl=photoUrl(path);
+ const check=await fetch(publicUrl,{cache:'no-store'});
+ if(!check.ok){throw Error('사진 파일 확인 실패: HTTP '+check.status)}
+ const stored=await check.blob();
+ if(stored.size===0){throw Error('사진이 서버에 0바이트로 저장됐어. 원본을 다시 선택해 줘.')}
+ if(stored.size!==file.size){throw Error('서버에 저장된 사진 용량이 원본과 달라. 다시 시도해 줘.')}
  try{await photoApi('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({entry_id:entryId,storage_path:path})})}
  catch(e){await fetch(PHOTO_BUCKET+'/'+path,{method:'DELETE',headers:{apikey:SUPABASE_KEY}}).catch(()=>{});throw e}
 }
@@ -250,7 +256,10 @@ $('#save').onclick=async()=>{
  if(!date||vals.length<3)return;btn.disabled=true;
  try{
   const body={person:current,entry_date:date,gratitude_1:vals[0],gratitude_2:vals[1],gratitude_3:vals.slice(2).join('\n'),updated_at:new Date().toISOString()};
-  const rows=await api('?on_conflict=person,entry_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(body)});
+  const oldEntryId=edit!==null?data[current]?.[edit]?.[3]:null;
+  const rows=oldEntryId
+   ?await api('?id=eq.'+encodeURIComponent(oldEntryId),{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(body)})
+   :await api('',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(body)});
   const entryId=rows?.[0]?.id;if(!entryId)throw Error('Entry id missing');
   let failures=0;
   for(const p of pendingPhotos){try{await uploadPhoto(p.file,entryId)}catch(e){failures++;console.error(e)}}
