@@ -393,7 +393,7 @@ function audioContext(){
 function loadBgm(){
   const ctx=audioContext();
   if(!ctx)return Promise.reject(new Error('Web Audio unavailable'));
-  if(!bgmLoad)bgmLoad=fetch('./bgm.wav').then(r=>{
+  if(!bgmLoad)bgmLoad=fetch('./bgm.wav?v=55').then(r=>{
     if(!r.ok)throw new Error('BGM fetch failed');
     return r.arrayBuffer();
   }).then(data=>ctx.decodeAudioData(data)).then(buffer=>bgmBuffer=buffer)
